@@ -113,12 +113,12 @@ router.put("/email/:email", upload.single("logo"), async (req, res) => {
     description_align,
   } = req.body;
 
-  // ✅ Check for uploaded logo
   const logoUrl = req.file
     ? `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`
     : null;
 
   try {
+    // First, try to update
     const result = await pool.query(
       `UPDATE letterheads SET
         company_name_arabic = $1,
@@ -136,7 +136,8 @@ router.put("/email/:email", upload.single("logo"), async (req, res) => {
         title_align = $13,
         description_align = $14,
         updated_at = CURRENT_TIMESTAMP
-      WHERE user_email = $15 RETURNING *`,
+      WHERE user_email = $15
+      RETURNING *`,
       [
         company_name_arabic,
         company_name_english,
@@ -156,16 +157,60 @@ router.put("/email/:email", upload.single("logo"), async (req, res) => {
       ]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Letterhead not found" });
+    if (result.rows.length > 0) {
+      return res.json(result.rows[0]); // updated
     }
 
-    res.json(result.rows[0]);
+    // If update did not find a row, insert new
+    const insertResult = await pool.query(
+      `INSERT INTO letterheads (
+        user_email,
+        company_name_arabic,
+        company_name_english,
+        address_en,
+        address_ar,
+        cr_number_en,
+        cr_number_ar,
+        website,
+        logo_url,
+        primary_color,
+        secondary_color,
+        font_size,
+        footer_font_size,
+        title_align,
+        description_align,
+        created_at,
+        updated_at
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        $10, $11, $12, $13, $14, $15, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      ) RETURNING *`,
+      [
+        email,
+        company_name_arabic,
+        company_name_english,
+        address_en,
+        address_ar,
+        cr_number_en,
+        cr_number_ar,
+        website,
+        logoUrl,
+        primary_color,
+        secondary_color,
+        font_size,
+        footer_font_size,
+        title_align,
+        description_align,
+      ]
+    );
+
+    res.status(201).json(insertResult.rows[0]); // inserted
   } catch (err) {
-    console.error("Error updating letterhead:", err);
+    console.error("Error saving letterhead:", err);
     res.status(500).json({ error: "Database error" });
   }
 });
+
 
 
 // DELETE letterhead by ID
